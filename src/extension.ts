@@ -1,5 +1,11 @@
 import * as vscode from 'vscode';
 
+// ここから追加
+interface FileInfo {
+	path: string;
+	content: string;
+}
+//ここまで追加
 export function activate(context: vscode.ExtensionContext) {
 	const provider = new MagiViewProvider(context.extensionUri, context);
 	context.subscriptions.push(
@@ -12,6 +18,7 @@ export function activate(context: vscode.ExtensionContext) {
 class MagiViewProvider implements vscode.WebviewViewProvider {
 	private _view?: vscode.WebviewView;
 	private _context: vscode.ExtensionContext;
+	private _readFiles: FileInfo[] = []; // この行を追加
 
 	constructor(private readonly extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
 		this._context = context; 
@@ -34,7 +41,16 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 //この行を削除    const messages = [vscode.LanguageModelChatMessage.User(data.text)];
 
 //ここから挿入
-				const prompt = `ユーザーの依頼：${data.text}
+				
+				let filesContext = '';
+				if (this._readFiles.length > 0) {
+					filesContext = '\n\nこれまでに読み込んだファイル:\n';
+					this._readFiles.forEach((fileInfo, index) => {
+						filesContext += `【ファイル${index + 1}】パス: ${fileInfo.path}\n内容:\n${fileInfo.content}\n\n`;
+					});
+				}
+//ここまで挿入
+				const prompt = `ユーザーの依頼：${data.text}${filesContext}
 
 ユーザーの依頼を実現するために、適切なアクションを決定してJSONで回答してください。
 
@@ -42,10 +58,11 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 {"tool":"利用するツール","args":["ツールに渡すパラメータ1","ツールに渡すパラメータ2"]}
 
 使用可能なツール：
+- "readfile": ファイルを読み込む場合。argsは["ファイルパス"]
 - "writefile": ファイルを作成・編集する場合。argsは["ファイルパス","ファイル内容"]
 - "message": ユーザーにメッセージを返す場合。argsは["ユーザに見せたいメッセージ"]
 
-ユーザーの依頼内容を分析し、ファイル操作が必要な場合は"writefile"、説明やメッセージが必要な場合は"message"を選択してください。
+ユーザーの依頼内容を分析し、ファイル操作が必要な場合は"writefile"または"readfile"、説明やメッセージが必要な場合は"message"を選択してください。
 JSON以外の文字は一切含めず、純粋なJSONのみを返してください。`;
 
 				const messages = [vscode.LanguageModelChatMessage.User(prompt)];
@@ -73,6 +90,48 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 							type: 'addElement',
 							text: returnJSON.args[0]
 						});
+					} else if (returnJSON.tool === 'readfile') {
+						// ファイル読み込みツールの場合：ファイルを読み込んでフィールドに保存
+						const filePath = returnJSON.args[0];
+						
+						// 現在のワークスペースフォルダを取得
+						const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+						if (workspaceFolder) {
+							try {
+								// ワークスペースフォルダ内のファイルパスを構築
+								const fullPath = vscode.Uri.joinPath(workspaceFolder.uri, filePath);
+								
+								// ファイルを読み込み
+								const fileData = await vscode.workspace.fs.readFile(fullPath);
+								const fileContent = new TextDecoder().decode(fileData);
+								
+								// すでに読み込み済みかチェック
+								const existingIndex = this._readFiles.findIndex(f => f.path === filePath);
+								if (existingIndex >= 0) {
+									// 既存のエントリを更新
+									this._readFiles[existingIndex].content = fileContent;
+								} else {
+									// 新しいエントリを追加
+									this._readFiles.push({ path: filePath, content: fileContent });
+								}
+								
+								// 成功メッセージを表示
+								webviewView.webview.postMessage({
+									type: 'addElement',
+									text: `ファイル "${filePath}" を読み込みました！（現在${this._readFiles.length}個のファイルを保持中）`
+								});
+							} catch (error) {
+								webviewView.webview.postMessage({
+									type: 'addElement',
+									text: `ファイル "${filePath}" の読み込みに失敗しました: ${error}`
+								});
+							}
+						} else {
+							webviewView.webview.postMessage({
+								type: 'addElement',
+								text: 'ワークスペースが開かれていません。'
+							});
+						}
 					} else if (returnJSON.tool === 'writefile') {
 						// ファイル書き込みツールの場合：ファイルを作成
 						const filePath = returnJSON.args[0];
