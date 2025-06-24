@@ -25,11 +25,25 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 		// webviewからのメッセージを受け取る
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			if (data.type === 'promptEntered') {
-				// webviewにテキストと共にイベントを送信
 				webviewView.webview.postMessage({
 					type: 'addElement',
 					text: data.text
 				});
+				//ここから挿入
+				const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4.1' });
+				const model = models[0];
+				const messages = [vscode.LanguageModelChatMessage.User(data.text)];
+				const response = await model.sendRequest(messages);
+
+				let returnTextFromVscodeLm = '';
+				for await (const fragment of response.text) {
+					returnTextFromVscodeLm += fragment;
+				}
+				webviewView.webview.postMessage({
+					type: 'addElement',
+					text: returnTextFromVscodeLm
+				});
+				//ここまで挿入
 			}
 		});
 		webviewView.webview.html = `<!DOCTYPE html>
@@ -41,7 +55,6 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
 	Hello World!
-<!-- ここから挿入 -->
 	<textarea id="input-textarea" data-testid="input-textarea" rows="4" style="width:100%" placeholder="Enter text and press Enter..."></textarea>
 	<div id="output" data-testid="output"></div>
 
@@ -89,7 +102,6 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 			isComposing = false;
 		});
 	</script>
-<!-- ここまで挿入 -->
 </body>
 </html>`;
 	}
