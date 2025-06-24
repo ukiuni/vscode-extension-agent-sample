@@ -1,0 +1,61 @@
+{
+  "name": "myagent",
+  "displayName": "myAgent",
+  "description": "Coding AI Agent",
+  "version": "0.0.1",
+  "license": "",
+  "publisher": "",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "AI"
+  ],
+  "icon": "",
+  "galleryBanner": {
+    "color": "#C80000",
+    "theme": "dark"
+  },
+  "pricing": "Free",
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": { 
+    "views": {
+      "main-view": [
+        {
+          "id": "main.view",
+          "name": "MainView",
+          "type": "webview"
+        }
+      ]
+    },   
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "main-view",
+          "title": "myExtension",
+          "icon": "./src/media/icon.svg"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.100.0",
+    "@typescript-eslint/eslint-plugin": "^8.31.1",
+    "@typescript-eslint/parser": "^8.31.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.25.1",
+    "typescript": "^5.8.3"
+  }
+}

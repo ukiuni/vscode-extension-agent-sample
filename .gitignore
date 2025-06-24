@@ -1,0 +1,19 @@
+# Compiled output
+out/
+*.vsix
+
+# Dependencies
+node_modules/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment
+.env*
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
