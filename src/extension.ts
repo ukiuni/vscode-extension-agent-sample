@@ -18,7 +18,8 @@ export function activate(context: vscode.ExtensionContext) {
 class MagiViewProvider implements vscode.WebviewViewProvider {
 	private _view?: vscode.WebviewView;
 	private _context: vscode.ExtensionContext;
-	private _readFiles: FileInfo[] = []; // この行を追加
+	private _readFiles: FileInfo[] = [];
+	private _executedTools: string[] = []; //この行を追加
 
 	constructor(private readonly extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
 		this._context = context; 
@@ -40,7 +41,8 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 				const model = models[0];
 //この行を削除    const messages = [vscode.LanguageModelChatMessage.User(data.text)];
 
-//ここから挿入
+				this._readFiles = [];
+				this._executedTools = [];
 				
 				let filesContext = '';
 				if (this._readFiles.length > 0) {
@@ -49,8 +51,22 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 						filesContext += `【ファイル${index + 1}】パス: ${fileInfo.path}\n内容:\n${fileInfo.content}\n\n`;
 					});
 				}
-//ここまで挿入
-				const prompt = `ユーザーの依頼：${data.text}${filesContext}
+				let isFinished = false;
+				let iterationCount = 0;
+				const maxIterations = 10;
+
+				while (!isFinished && iterationCount < maxIterations) {
+					iterationCount++;
+					
+					let toolHistoryContext = '';
+					if (this._executedTools.length > 0) {
+						toolHistoryContext = '\n\nこれまでに実行したツール:\n';
+						this._executedTools.forEach((tool, index) => {
+							toolHistoryContext += `${index + 1}. ${tool}\n`;
+						});
+					}
+					
+					const prompt = `ユーザーの依頼：${data.text}${filesContext}${toolHistoryContext}
 
 ユーザーの依頼を実現するために、適切なアクションを決定してJSONで回答してください。
 
@@ -61,36 +77,33 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 - "readfile": ファイルを読み込む場合。argsは["ファイルパス"]
 - "writefile": ファイルを作成・編集する場合。argsは["ファイルパス","ファイル内容"]
 - "message": ユーザーにメッセージを返す場合。argsは["ユーザに見せたいメッセージ"]
+- "finish": 依頼が完了した場合。argsは["完了メッセージ"]
 
-ユーザーの依頼内容を分析し、ファイル操作が必要な場合は"writefile"または"readfile"、説明やメッセージが必要な場合は"message"を選択してください。
+ユーザーの依頼内容を分析し、ファイル操作が必要な場合は"writefile"または"readfile"、説明やメッセージが必要な場合は"message"、すべてが完了した場合は"finish"を選択してください。
 JSON以外の文字は一切含めず、純粋なJSONのみを返してください。`;
 
-				const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-//ここまで挿入
-				const response = await model.sendRequest(messages);
+					const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+					const response = await model.sendRequest(messages);
 
-				let returnTextFromVscodeLm = '';
-				for await (const fragment of response.text) {
-					returnTextFromVscodeLm += fragment;
-				}
-/* ここから削除
-				webviewView.webview.postMessage({
-						type: 'addElement',
-						text: returnTextFromVscodeLm
-				});
-ここまで削除 */
-//ここから挿入				
-				try {
-					// LLMからの応答をJSONとしてパース
-					const returnJSON = JSON.parse(returnTextFromVscodeLm);
+					let returnTextFromVscodeLm = '';
+					for await (const fragment of response.text) {
+						returnTextFromVscodeLm += fragment;
+					}
 					
-					if (returnJSON.tool === 'message') {
-						// メッセージツールの場合：Webviewにメッセージを表示
-						webviewView.webview.postMessage({
-							type: 'addElement',
-							text: returnJSON.args[0]
-						});
-					} else if (returnJSON.tool === 'readfile') {
+					try {
+						// LLMからの応答をJSONとしてパース
+						const returnJSON = JSON.parse(returnTextFromVscodeLm);
+						
+						// 実行したツールを履歴に追加
+						this._executedTools.push(`${returnJSON.tool}(${returnJSON.args.join(', ')})`);
+						
+						if (returnJSON.tool === 'message') {
+							// メッセージツールの場合：Webviewにメッセージを表示
+							webviewView.webview.postMessage({
+								type: 'addElement',
+								text: returnJSON.args[0]
+							});
+						} else if (returnJSON.tool === 'readfile') {
 						// ファイル読み込みツールの場合：ファイルを読み込んでフィールドに保存
 						const filePath = returnJSON.args[0];
 						
@@ -157,6 +170,13 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 								text: 'ワークスペースが開かれていません。'
 							});
 						}
+					} else if (returnJSON.tool === 'finish') {
+						// finishツールの場合：完了メッセージを表示してループを終了
+						webviewView.webview.postMessage({
+							type: 'addElement',
+							text: returnJSON.args[0]
+						});
+						isFinished = true; // ループを終了
 					} else {
 						// 未知のツールの場合
 						webviewView.webview.postMessage({
@@ -170,8 +190,17 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 						type: 'addElement',
 						text: `JSONパースエラー: ${returnTextFromVscodeLm}`
 					});
+					isFinished = true; // エラーの場合もループを終了
 				}
-//ここまで挿入
+			} // whileループの終了
+			
+			// 最大反復回数に達した場合の警告メッセージ
+			if (iterationCount >= maxIterations) {
+				webviewView.webview.postMessage({
+					type: 'addElement',
+					text: '⚠️ 最大反復回数に達しました。処理を終了します。'
+				});
+			}
 			}
 		});
 		webviewView.webview.html = `<!DOCTYPE html>
