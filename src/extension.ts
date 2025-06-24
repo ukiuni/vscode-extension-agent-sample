@@ -21,6 +21,17 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 		webviewView.webview.options = {
 			enableScripts: true,
 		};
+		
+		// webviewからのメッセージを受け取る
+		webviewView.webview.onDidReceiveMessage(async (data) => {
+			if (data.type === 'promptEntered') {
+				// webviewにテキストと共にイベントを送信
+				webviewView.webview.postMessage({
+					type: 'addElement',
+					text: data.text
+				});
+			}
+		});
 		webviewView.webview.html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,7 +41,55 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
 	Hello World!
+<!-- ここから挿入 -->
+	<textarea id="input-textarea" data-testid="input-textarea" rows="4" style="width:100%" placeholder="Enter text and press Enter..."></textarea>
+	<div id="output" data-testid="output"></div>
 
+	<script>
+		const vscode = acquireVsCodeApi();
+		const textarea = document.getElementById('input-textarea');
+		const output = document.getElementById('output');
+		
+		textarea.addEventListener('keydown', function(event) {
+			// Enterキーが押された時
+			if (event.key === 'Enter') {
+				// IMEの変換中（composing状態）でない場合のみ処理
+				if (!event.isComposing) {
+					event.preventDefault(); // デフォルトの改行を防ぐ
+					
+					const text = textarea.value.trim();
+					if (text) {
+						// VS Codeにメッセージを送信
+						vscode.postMessage({
+							type: 'promptEntered',
+							text: text
+						});
+						textarea.value = '';
+					}
+				}
+			}
+		});
+		
+		// VS Codeからのメッセージを受け取る
+		window.addEventListener('message', event => {
+			const message = event.data;
+			if (message.type === 'addElement') {
+				const newDiv = document.createElement('div');
+				newDiv.textContent = message.text;
+				output.appendChild(newDiv);
+			}
+		});
+		
+		// composition系のイベントも念のため処理
+		let isComposing = false;
+		textarea.addEventListener('compositionstart', function() {
+			isComposing = true;
+		});
+		textarea.addEventListener('compositionend', function() {
+			isComposing = false;
+		});
+	</script>
+<!-- ここまで挿入 -->
 </body>
 </html>`;
 	}
