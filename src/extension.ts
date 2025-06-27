@@ -28,12 +28,12 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 					text: data.text
 				});
 
-        const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4.1' });
-				const model = models[0];
+                const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4.1' });
+		        const model = models[0];
 //この行を削除    const messages = [vscode.LanguageModelChatMessage.User(data.text)];
 
 //ここから挿入
-				const prompt = `ユーザーの依頼：${data.text}
+		        const prompt = `ユーザーの依頼：${data.text}
 
 ユーザーの依頼を実現するために、適切なアクションを決定してJSONで回答してください。
 
@@ -63,7 +63,7 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 ここまで削除 */
 //ここから挿入				
 				try {
-					// LLMからの応答をJSONとしてパース
+					// 生成AIからの応答をJSONとしてパース
 					const returnJSON = JSON.parse(returnTextFromVscodeLm);
 					
 					if (returnJSON.tool === 'message') {
@@ -89,7 +89,7 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 							// 成功メッセージを表示
 							webviewView.webview.postMessage({
 								type: 'addElement',
-								text: `ファイル "${filePath}" を作成しました！`
+								text: `ファイル "${filePath}" を作成しました。`
 							});
 						} else {
 							webviewView.webview.postMessage({
@@ -114,7 +114,6 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 //ここまで挿入
 			}
 		});
-//ここまで挿入
 		webviewView.webview.html = `<!DOCTYPE html>
 <html lang="en">
 <head>
