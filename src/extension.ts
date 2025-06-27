@@ -193,6 +193,7 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 						});
 						isFinished = true; // エラーの場合もループを終了 //この行を追加
 					}
+//ここから追加
 				} // whileループの終了
 				// 最大反復回数に達した場合の警告メッセージ
 				if (iterationCount >= maxIterations) {
@@ -201,6 +202,7 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 						text: '⚠️ 最大反復回数に達しました。処理を終了します。'
 					});
 				}
+//ここまで追加
 			}
 		});
 		webviewView.webview.html = `<!DOCTYPE html>
