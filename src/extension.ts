@@ -41,10 +41,10 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 {"tool":"利用するツール","args":["ツールに渡すパラメータ1","ツールに渡すパラメータ2"]}
 
 使用可能なツール：
-- "writeFile": ファイルを作成・編集する場合。argsは["ファイルパス","ファイル内容"]
+- "writefile": ファイルを作成・編集する場合。argsは["ファイルパス","ファイル内容"]
 - "message": ユーザーにメッセージを返す場合。argsは["ユーザに見せたいメッセージ"]
 
-ユーザーの依頼内容を分析し、ファイル操作が必要な場合は"writeFile"、説明やメッセージが必要な場合は"message"を選択してください。
+ユーザーの依頼内容を分析し、ファイル操作が必要な場合は"writefile"、説明やメッセージが必要な場合は"message"を選択してください。
 JSON以外の文字は一切含めず、純粋なJSONのみを返してください。`;
 
 				const messages = [vscode.LanguageModelChatMessage.User(prompt)];
@@ -72,7 +72,7 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 							type: 'addElement',
 							text: returnJSON.args[0]
 						});
-					} else if (returnJSON.tool === 'writeFile') {
+					} else if (returnJSON.tool === 'writefile') {
 						// ファイル書き込みツールの場合：ファイルを作成
 						const filePath = returnJSON.args[0];
 						const fileContent = returnJSON.args[1];
@@ -84,7 +84,7 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 							const fullPath = vscode.Uri.joinPath(workspaceFolder.uri, filePath);
 							
 							// ファイルを作成
-							await vscode.workspace.fs.writeFile(fullPath, Buffer.from(fileContent, 'utf8'));
+							await vscode.workspace.fs.writefile(fullPath, Buffer.from(fileContent, 'utf8'));
 							
 							// 成功メッセージを表示
 							webviewView.webview.postMessage({
