@@ -22,15 +22,14 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 	private _executedTools: string[] = []; //この行を追加
 
 	constructor(private readonly extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
-		this._context = context; 
+		this._context = context;
 	}
 	public async resolveWebviewView(webviewView: vscode.WebviewView) {
 		this._view = webviewView;
 		webviewView.webview.options = {
 			enableScripts: true,
 		};
-		
-		// webviewからのメッセージを受け取る
+
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			if (data.type === 'promptEntered') {
 				webviewView.webview.postMessage({
@@ -39,11 +38,10 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 				});
 				const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4.1' });
 				const model = models[0];
-//この行を削除    const messages = [vscode.LanguageModelChatMessage.User(data.text)];
 
-				this._readFiles = [];
-				this._executedTools = [];
-				
+				this._readFiles = []; //この行を追加
+				this._executedTools = []; //この行を追加
+
 				let filesContext = '';
 				if (this._readFiles.length > 0) {
 					filesContext = '\n\nこれまでに読み込んだファイル:\n';
@@ -51,13 +49,14 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 						filesContext += `【ファイル${index + 1}】パス: ${fileInfo.path}\n内容:\n${fileInfo.content}\n\n`;
 					});
 				}
+//ここから追加
 				let isFinished = false;
 				let iterationCount = 0;
 				const maxIterations = 10;
 
 				while (!isFinished && iterationCount < maxIterations) {
 					iterationCount++;
-					
+
 					let toolHistoryContext = '';
 					if (this._executedTools.length > 0) {
 						toolHistoryContext = '\n\nこれまでに実行したツール:\n';
@@ -65,7 +64,7 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 							toolHistoryContext += `${index + 1}. ${tool}\n`;
 						});
 					}
-					
+//ここまで追加					
 					const prompt = `ユーザーの依頼：${data.text}${filesContext}${toolHistoryContext}
 
 ユーザーの依頼を実現するために、適切なアクションを決定してJSONで回答してください。
@@ -81,7 +80,7 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 
 ユーザーの依頼内容を分析し、ファイル操作が必要な場合は"writefile"または"readfile"、説明やメッセージが必要な場合は"message"、すべてが完了した場合は"finish"を選択してください。
 JSON以外の文字は一切含めず、純粋なJSONのみを返してください。`;
-
+					// ↑の最初に${toolHistoryContext}を追加。また、使用可能なツール：にfinishの行を追加。
 					const messages = [vscode.LanguageModelChatMessage.User(prompt)];
 					const response = await model.sendRequest(messages);
 
@@ -89,14 +88,14 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 					for await (const fragment of response.text) {
 						returnTextFromVscodeLm += fragment;
 					}
-					
+
 					try {
 						// LLMからの応答をJSONとしてパース
 						const returnJSON = JSON.parse(returnTextFromVscodeLm);
-						
+
 						// 実行したツールを履歴に追加
 						this._executedTools.push(`${returnJSON.tool}(${returnJSON.args.join(', ')})`);
-						
+
 						if (returnJSON.tool === 'message') {
 							// メッセージツールの場合：Webviewにメッセージを表示
 							webviewView.webview.postMessage({
@@ -104,103 +103,104 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 								text: returnJSON.args[0]
 							});
 						} else if (returnJSON.tool === 'readfile') {
-						// ファイル読み込みツールの場合：ファイルを読み込んでフィールドに保存
-						const filePath = returnJSON.args[0];
-						
-						// 現在のワークスペースフォルダを取得
-						const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-						if (workspaceFolder) {
-							try {
+							// ファイル読み込みツールの場合：ファイルを読み込んでフィールドに保存
+							const filePath = returnJSON.args[0];
+
+							// 現在のワークスペースフォルダを取得
+							const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+							if (workspaceFolder) {
+								try {
+									// ワークスペースフォルダ内のファイルパスを構築
+									const fullPath = vscode.Uri.joinPath(workspaceFolder.uri, filePath);
+
+									// ファイルを読み込み
+									const fileData = await vscode.workspace.fs.readFile(fullPath);
+									const fileContent = new TextDecoder().decode(fileData);
+
+									// すでに読み込み済みかチェック
+									const existingIndex = this._readFiles.findIndex(f => f.path === filePath);
+									if (existingIndex >= 0) {
+										// 既存のエントリを更新
+										this._readFiles[existingIndex].content = fileContent;
+									} else {
+										// 新しいエントリを追加
+										this._readFiles.push({ path: filePath, content: fileContent });
+									}
+
+									// 成功メッセージを表示
+									webviewView.webview.postMessage({
+										type: 'addElement',
+										text: `ファイル "${filePath}" を読み込みました！（現在${this._readFiles.length}個のファイルを保持中）`
+									});
+								} catch (error) {
+									webviewView.webview.postMessage({
+										type: 'addElement',
+										text: `ファイル "${filePath}" の読み込みに失敗しました: ${error}`
+									});
+								}
+							} else {
+								webviewView.webview.postMessage({
+									type: 'addElement',
+									text: 'ワークスペースが開かれていません。'
+								});
+							}
+						} else if (returnJSON.tool === 'writefile') {
+							// ファイル書き込みツールの場合：ファイルを作成
+							const filePath = returnJSON.args[0];
+							const fileContent = returnJSON.args[1];
+
+							// 現在のワークスペースフォルダを取得
+							const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+							if (workspaceFolder) {
 								// ワークスペースフォルダ内のファイルパスを構築
 								const fullPath = vscode.Uri.joinPath(workspaceFolder.uri, filePath);
-								
-								// ファイルを読み込み
-								const fileData = await vscode.workspace.fs.readFile(fullPath);
-								const fileContent = new TextDecoder().decode(fileData);
-								
-								// すでに読み込み済みかチェック
-								const existingIndex = this._readFiles.findIndex(f => f.path === filePath);
-								if (existingIndex >= 0) {
-									// 既存のエントリを更新
-									this._readFiles[existingIndex].content = fileContent;
-								} else {
-									// 新しいエントリを追加
-									this._readFiles.push({ path: filePath, content: fileContent });
-								}
-								
+
+								// ファイルを作成
+								await vscode.workspace.fs.writeFile(fullPath, Buffer.from(fileContent, 'utf8'));
+
 								// 成功メッセージを表示
 								webviewView.webview.postMessage({
 									type: 'addElement',
-									text: `ファイル "${filePath}" を読み込みました！（現在${this._readFiles.length}個のファイルを保持中）`
+									text: `ファイル "${filePath}" を作成しました！`
 								});
-							} catch (error) {
+							} else {
 								webviewView.webview.postMessage({
 									type: 'addElement',
-									text: `ファイル "${filePath}" の読み込みに失敗しました: ${error}`
+									text: 'ワークスペースが開かれていません。'
 								});
 							}
-						} else {
+//ここから追加
+						} else if (returnJSON.tool === 'finish') {
+							// finishツールの場合：完了メッセージを表示してループを終了
 							webviewView.webview.postMessage({
 								type: 'addElement',
-								text: 'ワークスペースが開かれていません。'
+								text: returnJSON.args[0]
+							});
+							isFinished = true; // ループを終了
+//ここまで追加
+						} else {
+							// 未知のツールの場合
+							webviewView.webview.postMessage({
+								type: 'addElement',
+								text: `未知のツール: ${returnJSON.tool}`
 							});
 						}
-					} else if (returnJSON.tool === 'writefile') {
-						// ファイル書き込みツールの場合：ファイルを作成
-						const filePath = returnJSON.args[0];
-						const fileContent = returnJSON.args[1];
-						
-						// 現在のワークスペースフォルダを取得
-						const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-						if (workspaceFolder) {
-							// ワークスペースフォルダ内のファイルパスを構築
-							const fullPath = vscode.Uri.joinPath(workspaceFolder.uri, filePath);
-							
-							// ファイルを作成
-							await vscode.workspace.fs.writeFile(fullPath, Buffer.from(fileContent, 'utf8'));
-							
-							// 成功メッセージを表示
-							webviewView.webview.postMessage({
-								type: 'addElement',
-								text: `ファイル "${filePath}" を作成しました！`
-							});
-						} else {
-							webviewView.webview.postMessage({
-								type: 'addElement',
-								text: 'ワークスペースが開かれていません。'
-							});
-						}
-					} else if (returnJSON.tool === 'finish') {
-						// finishツールの場合：完了メッセージを表示してループを終了
+					} catch (error) {
+						// JSONパースエラーの場合は元のテキストをそのまま表示
 						webviewView.webview.postMessage({
 							type: 'addElement',
-							text: returnJSON.args[0]
+							text: `JSONパースエラー: ${returnTextFromVscodeLm}`
 						});
-						isFinished = true; // ループを終了
-					} else {
-						// 未知のツールの場合
-						webviewView.webview.postMessage({
-							type: 'addElement',
-							text: `未知のツール: ${returnJSON.tool}`
-						});
+						isFinished = true; // エラーの場合もループを終了 //この行を追加
 					}
-				} catch (error) {
-					// JSONパースエラーの場合は元のテキストをそのまま表示
+				} // whileループの終了
+				// 最大反復回数に達した場合の警告メッセージ
+				if (iterationCount >= maxIterations) {
 					webviewView.webview.postMessage({
 						type: 'addElement',
-						text: `JSONパースエラー: ${returnTextFromVscodeLm}`
+						text: '⚠️ 最大反復回数に達しました。処理を終了します。'
 					});
-					isFinished = true; // エラーの場合もループを終了
 				}
-			} // whileループの終了
-			
-			// 最大反復回数に達した場合の警告メッセージ
-			if (iterationCount >= maxIterations) {
-				webviewView.webview.postMessage({
-					type: 'addElement',
-					text: '⚠️ 最大反復回数に達しました。処理を終了します。'
-				});
-			}
 			}
 		});
 		webviewView.webview.html = `<!DOCTYPE html>
