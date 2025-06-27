@@ -29,7 +29,6 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 			enableScripts: true,
 		};
 		
-		// webviewからのメッセージを受け取る
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			if (data.type === 'promptEntered') {
 				webviewView.webview.postMessage({
@@ -38,9 +37,7 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 				});
 				const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4.1' });
 				const model = models[0];
-//この行を削除    const messages = [vscode.LanguageModelChatMessage.User(data.text)];
-
-//ここから挿入
+//ここから追加
 				
 				let filesContext = '';
 				if (this._readFiles.length > 0) {
@@ -49,7 +46,7 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 						filesContext += `【ファイル${index + 1}】パス: ${fileInfo.path}\n内容:\n${fileInfo.content}\n\n`;
 					});
 				}
-//ここまで挿入
+//ここまで追加
 				const prompt = `ユーザーの依頼：${data.text}${filesContext}
 
 ユーザーの依頼を実現するために、適切なアクションを決定してJSONで回答してください。
@@ -64,22 +61,16 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 
 ユーザーの依頼内容を分析し、ファイル操作が必要な場合は"writefile"または"readfile"、説明やメッセージが必要な場合は"message"を選択してください。
 JSON以外の文字は一切含めず、純粋なJSONのみを返してください。`;
-
+// ↑のプロンプトの最初に${filesContext}を追加、と、　使用可能なツール：にreadfileの行を追加。
 				const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-//ここまで挿入
+
 				const response = await model.sendRequest(messages);
 
 				let returnTextFromVscodeLm = '';
 				for await (const fragment of response.text) {
 					returnTextFromVscodeLm += fragment;
 				}
-/* ここから削除
-				webviewView.webview.postMessage({
-						type: 'addElement',
-						text: returnTextFromVscodeLm
-				});
-ここまで削除 */
-//ここから挿入				
+			
 				try {
 					// LLMからの応答をJSONとしてパース
 					const returnJSON = JSON.parse(returnTextFromVscodeLm);
@@ -90,6 +81,7 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 							type: 'addElement',
 							text: returnJSON.args[0]
 						});
+//ここから挿入	
 					} else if (returnJSON.tool === 'readfile') {
 						// ファイル読み込みツールの場合：ファイルを読み込んでフィールドに保存
 						const filePath = returnJSON.args[0];
@@ -132,6 +124,7 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 								text: 'ワークスペースが開かれていません。'
 							});
 						}
+//ここまで挿入
 					} else if (returnJSON.tool === 'writefile') {
 						// ファイル書き込みツールの場合：ファイルを作成
 						const filePath = returnJSON.args[0];
@@ -171,7 +164,6 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 						text: `JSONパースエラー: ${returnTextFromVscodeLm}`
 					});
 				}
-//ここまで挿入
 			}
 		});
 		webviewView.webview.html = `<!DOCTYPE html>
