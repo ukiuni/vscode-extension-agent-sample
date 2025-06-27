@@ -21,14 +21,15 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 		webviewView.webview.options = {
 			enableScripts: true,
 		};
+		
+		// webviewからのメッセージを受け取る
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			if (data.type === 'promptEntered') {
 				webviewView.webview.postMessage({
 					type: 'addElement',
 					text: data.text
 				});
-
-        const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4.1' });
+				const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4.1' });
 				const model = models[0];
 //この行を削除    const messages = [vscode.LanguageModelChatMessage.User(data.text)];
 
@@ -114,7 +115,6 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 //ここまで挿入
 			}
 		});
-//ここまで挿入
 		webviewView.webview.html = `<!DOCTYPE html>
 <html lang="en">
 <head>
