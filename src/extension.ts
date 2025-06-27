@@ -21,27 +21,97 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 		webviewView.webview.options = {
 			enableScripts: true,
 		};
-//ここから挿入
 		webviewView.webview.onDidReceiveMessage(async (data) => {
 			if (data.type === 'promptEntered') {
 				webviewView.webview.postMessage({
 					type: 'addElement',
 					text: data.text
 				});
-				
-				const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4.1' });
+
+        const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4.1' });
 				const model = models[0];
-				const messages = [vscode.LanguageModelChatMessage.User(data.text)];
+//この行を削除    const messages = [vscode.LanguageModelChatMessage.User(data.text)];
+
+//ここから挿入
+				const prompt = `ユーザーの依頼：${data.text}
+
+ユーザーの依頼を実現するために、適切なアクションを決定してJSONで回答してください。
+
+回答は必ず以下のJSON形式で返してください：
+{"tool":"利用するツール","args":["ツールに渡すパラメータ1","ツールに渡すパラメータ2"]}
+
+使用可能なツール：
+- "writefile": ファイルを作成・編集する場合。argsは["ファイルパス","ファイル内容"]
+- "message": ユーザーにメッセージを返す場合。argsは["ユーザに見せたいメッセージ"]
+
+ユーザーの依頼内容を分析し、ファイル操作が必要な場合は"writefile"、説明やメッセージが必要な場合は"message"を選択してください。
+JSON以外の文字は一切含めず、純粋なJSONのみを返してください。`;
+
+				const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+//ここまで挿入
 				const response = await model.sendRequest(messages);
 
 				let returnTextFromVscodeLm = '';
 				for await (const fragment of response.text) {
 					returnTextFromVscodeLm += fragment;
 				}
+/* ここから削除
 				webviewView.webview.postMessage({
-					type: 'addElement',
-					text: returnTextFromVscodeLm
+						type: 'addElement',
+						text: returnTextFromVscodeLm
 				});
+ここまで削除 */
+//ここから挿入				
+				try {
+					// LLMからの応答をJSONとしてパース
+					const returnJSON = JSON.parse(returnTextFromVscodeLm);
+					
+					if (returnJSON.tool === 'message') {
+						// メッセージツールの場合：Webviewにメッセージを表示
+						webviewView.webview.postMessage({
+							type: 'addElement',
+							text: returnJSON.args[0]
+						});
+					} else if (returnJSON.tool === 'writefile') {
+						// ファイル書き込みツールの場合：ファイルを作成
+						const filePath = returnJSON.args[0];
+						const fileContent = returnJSON.args[1];
+						
+						// 現在のワークスペースフォルダを取得
+						const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+						if (workspaceFolder) {
+							// ワークスペースフォルダ内のファイルパスを構築
+							const fullPath = vscode.Uri.joinPath(workspaceFolder.uri, filePath);
+							
+							// ファイルを作成
+							await vscode.workspace.fs.writeFile(fullPath, Buffer.from(fileContent, 'utf8'));
+							
+							// 成功メッセージを表示
+							webviewView.webview.postMessage({
+								type: 'addElement',
+								text: `ファイル "${filePath}" を作成しました！`
+							});
+						} else {
+							webviewView.webview.postMessage({
+								type: 'addElement',
+								text: 'ワークスペースが開かれていません。'
+							});
+						}
+					} else {
+						// 未知のツールの場合
+						webviewView.webview.postMessage({
+							type: 'addElement',
+							text: `未知のツール: ${returnJSON.tool}`
+						});
+					}
+				} catch (error) {
+					// JSONパースエラーの場合は元のテキストをそのまま表示
+					webviewView.webview.postMessage({
+						type: 'addElement',
+						text: `JSONパースエラー: ${returnTextFromVscodeLm}`
+					});
+				}
+//ここまで挿入
 			}
 		});
 //ここまで挿入
@@ -54,7 +124,6 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
 	Hello World!
-<!-- ここから挿入 -->
 	<textarea id="input-textarea" data-testid="input-textarea" rows="4" style="width:100%" placeholder="Enter text and press Enter..."></textarea>
 	<div id="output" data-testid="output"></div>
 
@@ -102,7 +171,6 @@ class MagiViewProvider implements vscode.WebviewViewProvider {
 			isComposing = false;
 		});
 	</script>
-<!-- ここまで挿入 -->
 </body>
 </html>`;
 	}
