@@ -84,7 +84,7 @@ JSON以外の文字は一切含めず、純粋なJSONのみを返してくださ
 							const fullPath = vscode.Uri.joinPath(workspaceFolder.uri, filePath);
 							
 							// ファイルを作成
-							await vscode.workspace.fs.writefile(fullPath, Buffer.from(fileContent, 'utf8'));
+							await vscode.workspace.fs.writeFile(fullPath, Buffer.from(fileContent, 'utf8'));
 							
 							// 成功メッセージを表示
 							webviewView.webview.postMessage({
