@@ -7,7 +7,7 @@ interface FileInfo {
 }
 //ここまで追加
 export function activate(context: vscode.ExtensionContext) {
-	const provider = new MagiViewProvider(context.extensionUri, context);
+	const provider = new MagiViewProvider();
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(
 			"main.view",
@@ -16,16 +16,10 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 }
 class MagiViewProvider implements vscode.WebviewViewProvider {
-	private _view?: vscode.WebviewView;
-	private _context: vscode.ExtensionContext;
 	private _readFiles: FileInfo[] = [];
 	private _executedTools: string[] = []; //この行を追加
 
-	constructor(private readonly extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
-		this._context = context;
-	}
 	public async resolveWebviewView(webviewView: vscode.WebviewView) {
-		this._view = webviewView;
 		webviewView.webview.options = {
 			enableScripts: true,
 		};
